@@ -7,42 +7,67 @@ const CONFIG={
   proposalAnswers:["evet","evet!","evet aşkım","evet sevgilim"]
 };
 const $=s=>document.querySelector(s),screens=[...document.querySelectorAll(".screen")];
-const music=$("#bgMusic"),sound=$("#soundToggle");let musicStarted=false,photoIndex=0,typingTimer;
-function normalize(v){return v.trim().toLocaleLowerCase("tr-TR").replace(/[.!?,;:❤️]/g,"").replace(/\s+/g," ")}
-function showScreen(id){
-  clearInterval(typingTimer);
-  screens.forEach(s=>s.classList.toggle("active",s.id===id));
-  window.scrollTo({top:0,behavior:"smooth"});
-  if(id==="noteOneScreen")typeText($("#noteOneText"),CONFIG.noteOne);
-  if(id==="noteTwoScreen")typeText($("#noteTwoText"),CONFIG.noteTwo);
+const music=$("#bgMusic"),sound=$("#soundToggle");
+let musicStarted=false,firstPlaybackChecked=false,photoIndex=0,typingTimer;
+
+music.preload="auto";
+music.volume=.38;
+music.load();
+
+function setSoundUI(active){
+  sound.classList.toggle("muted",!active);
+  $(".sound-icon").textContent=active?"♫":"×";
 }
+
+// Mobil Safari bazen ilk play isteğini bekletip parçayı ileriden başlatabiliyor.
+// İlk gerçek oynatma anında konumu tekrar sıfırlıyoruz.
+music.addEventListener("playing",()=>{
+  if(!firstPlaybackChecked){
+    firstPlaybackChecked=true;
+    if(music.currentTime>.35){
+      try{music.currentTime=0}catch(e){}
+    }
+  }
+  musicStarted=true;
+  setSoundUI(true);
+});
+
 async function startMusic(){
-  if(musicStarted)return;
+  if(!music.paused && musicStarted)return;
+  music.muted=false;
   music.volume=.38;
+  firstPlaybackChecked=false;
   try{
+    music.pause();
+    if(Number.isFinite(music.duration) || music.readyState>0) music.currentTime=0;
     await music.play();
-    musicStarted=true;
-    sound.classList.remove("muted");
-    $(".sound-icon").textContent="♫";
+    // play() çözülse bile bazı mobil tarayıcılar birkaç kare sonra ileriden başlatabiliyor.
+    requestAnimationFrame(()=>{
+      if(!firstPlaybackChecked && music.currentTime>.35){
+        try{music.currentTime=0}catch(e){}
+      }
+    });
   }catch(e){
-    // MP3 henüz eklenmediyse veya tarayıcı engellerse site çalışmaya devam eder.
-    sound.classList.add("muted");
-    $(".sound-icon").textContent="×";
+    setSoundUI(false);
   }
 }
+
 function openGift(){
-  startMusic();$("#boxButton").classList.add("opening");
-  setTimeout(()=>{$("#boxButton").classList.remove("opening");showScreen("questionScreen")},850)
+  // Doğrudan kullanıcı dokunuşunun içinde çağrıldığı için mobil tarayıcı izin verir.
+  startMusic();
+  $("#boxButton").classList.add("opening");
+  setTimeout(()=>{$("#boxButton").classList.remove("opening");showScreen("questionScreen")},850);
 }
-$("#startButton").onclick=openGift;$("#boxButton").onclick=openGift;
+$("#startButton").onclick=openGift;
+$("#boxButton").onclick=openGift;
+
 sound.onclick=async()=>{
-  if(!musicStarted){
+  if(music.paused || !musicStarted){
     await startMusic();
     return;
   }
   music.muted=!music.muted;
-  sound.classList.toggle("muted",music.muted);
-  $(".sound-icon").textContent=music.muted?"×":"♫";
+  setSoundUI(!music.muted);
 };
 $("#firstQuestion").textContent=CONFIG.firstQuestion;
 function checkFirst(){
@@ -55,56 +80,55 @@ function typeText(el,text){el.textContent="";let i=0;typingTimer=setInterval(()=
 function goGallery(){showScreen("galleryScreen")}
 $("#letterOne").onclick=goGallery;$("#letterOne").onkeydown=e=>{if(e.key==="Enter"||e.key===" ")goGallery()};
 const photoCard=$("#photoCard"),galleryImage=$("#galleryImage");
-let photoTransitioning=false;
+let galleryBusy=false,pendingPhotoSteps=0,galleryFinished=false;
 
-// Fotoğrafları galeri açılmadan tarayıcı önbelleğine al.
-CONFIG.photos.forEach(src=>{
+// Tüm fotoğrafları önceden yükle ve mümkünse decode et.
+const photoPreloads=CONFIG.photos.map(src=>{
   const img=new Image();
   img.src=src;
+  return img.decode?img.decode().catch(()=>{}):Promise.resolve();
 });
 
-function nextPhoto(){
-  // Animasyon sürerken gelen ikinci dokunuşu yok say.
-  if(photoTransitioning)return;
+function wait(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
 
-  if(photoIndex>=CONFIG.photos.length-1){
-    photoTransitioning=true;
-    showScreen("noteTwoScreen");
-    setTimeout(()=>{photoTransitioning=false},500);
-    return;
-  }
+async function processPhotoQueue(){
+  if(galleryBusy || galleryFinished)return;
+  galleryBusy=true;
 
-  photoTransitioning=true;
-  const nextIndex=photoIndex+1;
-  const nextSrc=CONFIG.photos[nextIndex];
-  const preload=new Image();
+  while(pendingPhotoSteps>0 && !galleryFinished){
+    pendingPhotoSteps--;
 
-  const applyNextPhoto=()=>{
+    if(photoIndex>=CONFIG.photos.length-1){
+      galleryFinished=true;
+      showScreen("noteTwoScreen");
+      break;
+    }
+
+    const nextIndex=photoIndex+1;
+    await photoPreloads[nextIndex];
+
     photoCard.classList.remove("next");
     void photoCard.offsetWidth;
     photoCard.classList.add("next");
 
-    // Kart görünmez olduğu anda yeni fotoğrafı yerleştir.
-    setTimeout(()=>{
-      photoIndex=nextIndex;
-      galleryImage.src=nextSrc;
-      $("#photoCounter").textContent=`${photoIndex+1} / ${CONFIG.photos.length}`;
-    },220);
+    await wait(150);
+    photoIndex=nextIndex;
+    galleryImage.src=CONFIG.photos[photoIndex];
+    $("#photoCounter").textContent=`${photoIndex+1} / ${CONFIG.photos.length}`;
 
-    // Animasyon tamamlandıktan sonra tekrar dokunmaya izin ver.
-    setTimeout(()=>{
-      photoCard.classList.remove("next");
-      photoTransitioning=false;
-    },620);
-  };
-
-  if(preload.complete){
-    applyNextPhoto();
-  }else{
-    preload.onload=applyNextPhoto;
-    preload.onerror=applyNextPhoto;
-    preload.src=nextSrc;
+    await wait(300);
+    photoCard.classList.remove("next");
+    await wait(40);
   }
+
+  galleryBusy=false;
+  if(pendingPhotoSteps>0 && !galleryFinished)processPhotoQueue();
+}
+
+function nextPhoto(){
+  // Her dokunuş kaydedilir; animasyon sırasında yapılan dokunuşlar artık kaybolmaz.
+  pendingPhotoSteps++;
+  processPhotoQueue();
 }
 
 $("#photoDeck").onclick=nextPhoto;
@@ -122,7 +146,7 @@ function checkProposal(){
   else $("#proposalFeedback").textContent="Bu küçük kutu yalnızca tek bir kelimeyi bekliyor 💍";
 }
 $("#proposalButton").onclick=checkProposal;$("#proposalAnswer").onkeydown=e=>{if(e.key==="Enter")checkProposal()};
-$("#restartButton").onclick=()=>{photoIndex=0;galleryImage.src=CONFIG.photos[0];$("#photoCounter").textContent="1 / 9";$("#firstAnswer").value="";$("#proposalAnswer").value="";$("#answerFeedback").textContent="";$("#proposalFeedback").textContent="";showScreen("welcomeScreen")};
+$("#restartButton").onclick=()=>{photoIndex=0;pendingPhotoSteps=0;galleryBusy=false;galleryFinished=false;galleryImage.src=CONFIG.photos[0];$("#photoCounter").textContent="1 / 9";$("#firstAnswer").value="";$("#proposalAnswer").value="";$("#answerFeedback").textContent="";$("#proposalFeedback").textContent="";showScreen("welcomeScreen")};
 function celebrate(){
   const hearts=$("#floatingHearts"),confetti=$("#confetti");hearts.innerHTML="";confetti.innerHTML="";
   for(let i=0;i<36;i++){const h=document.createElement("span");h.className="float-heart";h.textContent=Math.random()>.45?"♥":"♡";h.style.left=`${Math.random()*100}vw`;h.style.fontSize=`${14+Math.random()*24}px`;h.style.animationDuration=`${4+Math.random()*5}s`;h.style.animationDelay=`${Math.random()*3}s`;hearts.appendChild(h)}
