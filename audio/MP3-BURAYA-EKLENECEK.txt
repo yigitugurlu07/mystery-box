@@ -1,0 +1,9 @@
+Kendi MP3 dosyanızı bu klasöre ekleyin.
+
+Dosyanın adı tam olarak:
+music.mp3
+
+Sonuç:
+audio/music.mp3
+
+Dosya adı küçük harfle ve boşluksuz olmalıdır.
