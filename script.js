@@ -18,8 +18,12 @@ function normalize(v){
 
 function showScreen(id){
   clearInterval(typingTimer);
-  screens.forEach(screen=>screen.classList.toggle("active",screen.id===id));
-  window.scrollTo({top:0,behavior:"smooth"});
+  for(let i=0;i<screens.length;i++){
+    const screen=screens[i];
+    if(screen.id===id)screen.classList.add("active");
+    else screen.classList.remove("active");
+  }
+  try{window.scrollTo(0,0)}catch(e){}
   if(id==="noteOneScreen") typeText($("#noteOneText"),CONFIG.noteOne);
   if(id==="noteTwoScreen") typeText($("#noteTwoText"),CONFIG.noteTwo);
 }
@@ -66,14 +70,54 @@ async function startMusic(){
   }
 }
 
-function openGift(){
-  // Doğrudan kullanıcı dokunuşunun içinde çağrıldığı için mobil tarayıcı izin verir.
-  startMusic();
-  $("#boxButton").classList.add("opening");
-  setTimeout(()=>{$("#boxButton").classList.remove("opening");showScreen("questionScreen")},850);
+let giftOpening=false;
+let lastGiftTouch=0;
+
+function openGift(event){
+  if(event){
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  if(giftOpening)return;
+  giftOpening=true;
+
+  // Ses başarısız olsa veya Safari play isteğini bekletse bile ekran geçişi etkilenmez.
+  try{ startMusic(); }catch(e){}
+
+  const box=$("#boxButton");
+  if(box)box.classList.add("opening");
+
+  window.setTimeout(()=>{
+    if(box)box.classList.remove("opening");
+    showScreen("questionScreen");
+    giftOpening=false;
+  },700);
 }
-$("#startButton").onclick=openGift;
-$("#boxButton").onclick=openGift;
+
+// iPhone Safari için touchend yedeği; ardından oluşan click çift çalıştırılmaz.
+function bindGiftButton(el){
+  if(!el)return;
+  el.setAttribute("type","button");
+
+  el.addEventListener("touchend",e=>{
+    lastGiftTouch=Date.now();
+    openGift(e);
+  },{passive:false});
+
+  el.addEventListener("click",e=>{
+    if(Date.now()-lastGiftTouch<900){
+      e.preventDefault();
+      return;
+    }
+    openGift(e);
+  });
+}
+
+bindGiftButton($("#startButton"));
+bindGiftButton($("#boxButton"));
+
+// Inline/yedek çağrılar için global erişim.
+window.openGift=openGift;
 
 sound.onclick=async()=>{
   if(music.paused || !musicStarted){
