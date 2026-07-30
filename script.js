@@ -10,6 +10,20 @@ const $=s=>document.querySelector(s),screens=[...document.querySelectorAll(".scr
 const music=$("#bgMusic"),sound=$("#soundToggle");
 let musicStarted=false,firstPlaybackChecked=false,photoIndex=0,typingTimer;
 
+function normalize(v){
+  return v.trim().toLocaleLowerCase("tr-TR")
+    .replace(/[.!?,;:❤️]/g,"")
+    .replace(/\s+/g," ");
+}
+
+function showScreen(id){
+  clearInterval(typingTimer);
+  screens.forEach(screen=>screen.classList.toggle("active",screen.id===id));
+  window.scrollTo({top:0,behavior:"smooth"});
+  if(id==="noteOneScreen") typeText($("#noteOneText"),CONFIG.noteOne);
+  if(id==="noteTwoScreen") typeText($("#noteTwoText"),CONFIG.noteTwo);
+}
+
 music.preload="auto";
 music.volume=.38;
 music.load();
