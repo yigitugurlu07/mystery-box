@@ -20,8 +20,11 @@ function showScreen(id){
   clearInterval(typingTimer);
   for(let i=0;i<screens.length;i++){
     const screen=screens[i];
-    if(screen.id===id)screen.classList.add("active");
-    else screen.classList.remove("active");
+    const active=screen.id===id;
+    screen.classList.toggle("active",active);
+    screen.style.display=active?"flex":"none";
+    screen.style.opacity=active?"1":"";
+    screen.style.visibility=active?"visible":"";
   }
   try{window.scrollTo(0,0)}catch(e){}
   if(id==="noteOneScreen") typeText($("#noteOneText"),CONFIG.noteOne);
@@ -87,11 +90,27 @@ function openGift(event){
   const box=$("#boxButton");
   if(box)box.classList.add("opening");
 
-  window.setTimeout(()=>{
+  window.setTimeout(function(){
     if(box)box.classList.remove("opening");
-    showScreen("questionScreen");
+
+    // WhatsApp'ın iPhone iç tarayıcısı için doğrudan ve zorunlu ekran geçişi.
+    var welcome=document.getElementById("welcomeScreen");
+    var question=document.getElementById("questionScreen");
+
+    if(welcome){
+      welcome.classList.remove("active");
+      welcome.style.display="none";
+    }
+    if(question){
+      question.classList.add("active");
+      question.style.display="flex";
+      question.style.opacity="1";
+      question.style.visibility="visible";
+    }
+
+    try{window.scrollTo(0,0);}catch(e){}
     giftOpening=false;
-  },700);
+  },320);
 }
 
 // iPhone Safari için touchend yedeği; ardından oluşan click çift çalıştırılmaz.
